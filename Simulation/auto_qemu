@@ -1,0 +1,16 @@
+#!/usr/bin/expect -f
+set timeout 80
+
+spawn ./Simulation/scripts/build.sh
+
+expect "debian-mips login:"
+send "root\r"
+expect "Password:"
+send "root\r"
+expect "root@*#"
+send "ifconfig eth0 192.168.153.2 netmask 255.255.255.0 up\r"
+expect "root@*#"
+send "route add default gw 192.168.153.1 eth0\r"
+expect "root@*#"
+
+interact

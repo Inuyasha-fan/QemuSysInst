@@ -1,0 +1,22 @@
+# IDE
+.vscode/
+
+# Build
+Debug/build/*
+!Debug/build/.gitkeep
+
+# Logs & Data
+*.log
+!/Log/.gitkeep
+*.csv
+!/Data/.gitkeep
+
+# Python
+*.pyc
+
+# Simulation
+Simulation/mirrors/*
+!/Simulation/mirrors/.gitkeep
+
+# QEMU
+Qemu/*
