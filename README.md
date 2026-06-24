@@ -29,44 +29,69 @@ pip install pexpect paramiko distlib
 - `pexpect`/`paramiko`：用于 Python 测试脚本。
 - `distlib`：Python 包管理工具。
 
-## 二、编译
-先在项目根目录准备 QEMU 源码：
+## 二、环境配置
+
+设置工作路径环境变量（将 `/path/to/QemuSysInst` 替换为实际项目路径）：
 
 ```shell
+export QEMU_COV_HOME=/path/to/QemuSysInst
+```
+
+赋予脚本执行权限：
+
+```shell
+chmod o+x $QEMU_COV_HOME/Simulation/auto_qemu
+chmod o+x $QEMU_COV_HOME/Simulation/scripts/*
+```
+
+## 三、编译
+在项目根目录准备 QEMU 源码：
+
+```shell
+cd $QEMU_COV_HOME
 git clone https://github.com/qemu/qemu
-cd qemu
-git checkout v8.2.10
-cd ..
-mv qemu Qemu
-mkdir -p Qemu/build
+cd qemu && git checkout v8.2.10 && cd .. && mv qemu Qemu && mkdir -p Qemu/build
 ```
 
 将覆盖率插件源码复制到 QEMU 插件目录：
 
 ```shell
-cp Debug/src/coverage/coverage.c Qemu/contrib/plugins/
-cp Debug/src/coverage/coverage_comm.c Qemu/contrib/plugins/
-cp Debug/src/coverage/coverage_comm.h Qemu/contrib/plugins/
-cp Debug/src/socket/socket_comm.c Qemu/contrib/plugins/
-cp Debug/src/socket/socket_comm.h Qemu/contrib/plugins/
+cp $QEMU_COV_HOME/Debug/src/coverage/coverage.c $QEMU_COV_HOME/Qemu/contrib/plugins/
+cp $QEMU_COV_HOME/Debug/src/coverage/coverage_comm.c $QEMU_COV_HOME/Qemu/contrib/plugins/
+cp $QEMU_COV_HOME/Debug/src/coverage/coverage_comm.h $QEMU_COV_HOME/Qemu/contrib/plugins/
+cp $QEMU_COV_HOME/Debug/src/socket/socket_comm.c $QEMU_COV_HOME/Qemu/contrib/plugins/
+cp $QEMU_COV_HOME/Debug/src/socket/socket_comm.h $QEMU_COV_HOME/Qemu/contrib/plugins/
 ```
 
-修改 `Qemu/contrib/plugins/Makefile`，在 `contrib_plugins` 列表中添加 `coverage.so`：
+修改 `Qemu/contrib/plugins/Makefile`，在 `NAMES` 列表中添加 `coverage`：
 
 ```makefile
-contrib_plugins += coverage.so
+NAMES += coverage
+```
+
+在 Makefile 末尾添加编译规则：
+
+```makefile
+socket_comm.o: socket_comm.c socket_comm.h
+	$(CC) $(CFLAGS) $(PLUGIN_CFLAGS) -c -o $@ $<
+
+libcoverage$(SO_SUFFIX): coverage.o socket_comm.o coverage_comm.o
+	$(CC) -shared -o $@ $^ $(LDLIBS)
+
+coverage_comm.o: coverage_comm.c coverage_comm.h
+	$(CC) $(CFLAGS) $(PLUGIN_CFLAGS) -c -o $@ $<
 ```
 
 `Debug` 目录构建命令：
 
 ```shell
-make -C Debug
+make -C $QEMU_COV_HOME/Debug
 ```
 
 QEMU 编译（仅 `mips-softmmu,mips64-softmmu`，开启插件）：
 
 ```shell
-cd Qemu/build
+cd $QEMU_COV_HOME/Qemu/build
 ../configure \
   --target-list=mips-softmmu,mips64-softmmu \
   --enable-plugins \
@@ -79,32 +104,32 @@ make install
 如仅重编插件：
 
 ```shell
-cd Qemu/build/contrib/plugins
+cd $QEMU_COV_HOME/Qemu/build/contrib/plugins
 make -j"$(nproc)"
 ```
 
-## 三、QEMU 启动
+## 四、QEMU 启动
 首次使用前，需要先下载内核文件和磁盘文件：
 
 ```shell
-curl -o Simulation/mirrors/debian_squeeze_mips_standard.qcow2 https://people.debian.org/~aurel32/qemu/mips/debian_squeeze_mips_standard.qcow2
-curl -o Simulation/mirrors/vmlinux-2.6.32-5-4kc-malta https://people.debian.org/~aurel32/qemu/mips/vmlinux-2.6.32-5-4kc-malta
+curl -o $QEMU_COV_HOME/Simulation/mirrors/debian_squeeze_mips_standard.qcow2 https://people.debian.org/~aurel32/qemu/mips/debian_squeeze_mips_standard.qcow2
+curl -o $QEMU_COV_HOME/Simulation/mirrors/vmlinux-2.6.32-5-4kc-malta https://people.debian.org/~aurel32/qemu/mips/vmlinux-2.6.32-5-4kc-malta
 ```
 
 无插件启动（用于验证镜像、登录、网络）：
 
 ```shell
 # 退出时先按 Ctrl + A，再按 C 进入 QEMU 控制台
-./Simulation/auto_qemu
+$QEMU_COV_HOME/Simulation/auto_qemu
 ```
 
 覆盖率模式启动：
 
 ```shell
 # 正常启动，不加载覆盖率插件
-./Simulation/scripts/build.sh
+$QEMU_COV_HOME/Simulation/scripts/build.sh
 # 启动覆盖率插件（监听 127.0.0.1:3111）
-./Simulation/scripts/build.sh coverage
+$QEMU_COV_HOME/Simulation/scripts/build.sh coverage
 ```
 
 如需虚拟机访问外网，在宿主机上配置转发和 NAT（将 `ens3` 替换为宿主机真实网卡）：
@@ -122,7 +147,7 @@ sudo iptables -A FORWARD -i Virbr0 -o ens3 -j ACCEPT
 echo "nameserver 223.5.5.5" > /etc/resolv.conf
 ```
 
-## 四、覆盖率控制协议
+## 五、覆盖率控制协议
 `test_qemu_client` 与 `Qemu/contrib/plugins/coverage.c` 已改为“CSV 落盘完成通知”协议，不再实时发送/接收 hash。
 每轮流程如下：
 1. `client -> plugin` 发送 `1`：开始该轮覆盖率采集。
@@ -135,17 +160,17 @@ echo "nameserver 223.5.5.5" > /etc/resolv.conf
 可直接运行示例客户端（当前默认两轮）：
 
 ```shell
-./Debug/build/test_qemu_client
+$QEMU_COV_HOME/Debug/build/test_qemu_client
 ```
 
 补充：
 - 插件首次从 noise 阶段切入 coverage 阶段时会导出 `Data/noise.csv`。
 - 如果插件端长时间未接入客户端，socket 会超时退出。
 
-## 五、测试脚本说明
+## 六、测试脚本说明
 说明：
 - SMTP 服务（包括本地邮件）要正常使用，需要先完成与虚拟机访问外网相同的转发和 NAT 配置。
-- SMTP 相关测试脚本运行前，必须在 guest 内完成一次 `exim4` 配置；这项配置只需要做一次，后续无需重复设置。
+- SMTP 相关测试脚本运行前，必须在虚拟机内完成一次 `exim4` 配置；这项配置只需要做一次，后续无需重复设置。
 
 `exim4` 配置命令：
 ```shell
@@ -175,7 +200,7 @@ dpkg-reconfigure exim4-config
 
 运行：
 ```shell
-python3 Debug/src/test/test_ssh.py
+python3 $QEMU_COV_HOME/Debug/src/test/test_ssh.py
 ```
 ### test_smtp.py
 功能：
@@ -189,12 +214,12 @@ python3 Debug/src/test/test_ssh.py
 
 运行：
 ```shell
-python3 Debug/src/test/test_smtp.py
+python3 $QEMU_COV_HOME/Debug/src/test/test_smtp.py
 ```
 ### test_coverage.py
 功能：
-- 自动启动 `build.sh coverage`。
-- 自动登录 guest、执行基础网络准备。
+- 自动启动 `$QEMU_COV_HOME/Simulation/scripts/build.sh coverage`。
+- 自动登录虚拟机、执行基础网络准备。
 - 通过 socket 驱动多轮 SSH/SMTP 覆盖率采集，并在每轮结束后读取对应的 `Data/coverage-i.csv`。
 
 流程：
@@ -218,7 +243,7 @@ python3 Debug/src/test/test_smtp.py
 运行：
 
 ```shell
-python3 Debug/src/test/test_coverage.py
+python3 $QEMU_COV_HOME/Debug/src/test/test_coverage.py
 ```
 
 输出：
@@ -239,5 +264,5 @@ python3 Debug/src/test/test_coverage.py
 
 运行：
 ```shell
-python3 Debug/src/test/test_coverage_presentation.py
+python3 $QEMU_COV_HOME/Debug/src/test/test_coverage_presentation.py
 ```
