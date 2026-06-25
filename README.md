@@ -93,7 +93,7 @@ QEMU 编译（仅 `mips-softmmu,mips64-softmmu`，开启插件）：
 ```shell
 cd $QEMU_COV_HOME/Qemu/build
 ../configure \
-  --target-list=mips-softmmu,mips64-softmmu \
+  --target-list=mips-linux-user,mips64-linux-user,mips-softmmu,mips64-softmmu \
   --enable-plugins \
   --enable-debug \
   --prefix=$PWD/install
